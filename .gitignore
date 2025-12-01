@@ -1,1 +1,27 @@
 /.venv/
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+
+# IDE
+.idea/
+.vscode/
+
+# Node/UI
+node_modules/
+dist/
+build/
+
+# Env & local
+.env
+.env.*
+
+# Data & models
+models/
+data/
+
+# Docker volumes (if bind-mounted)
+volumes/
