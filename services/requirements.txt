@@ -7,7 +7,8 @@ pymilvus==2.4.9
 requests==2.32.3
 beautifulsoup4==4.12.3
 langdetect==1.0.9
+pypdf==4.2.0
 transformers==4.44.2
 sentence-transformers==3.1.0
-torch==2.3.1+cpu
---index-url https://download.pytorch.org/whl/cpu
+numpy==1.26.4
+torch==2.3.1
