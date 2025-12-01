@@ -1,0 +1,149 @@
+# Sprint 0: Core infrastructure and optional LLM runtimes
+
+name: pivot
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: pivot-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: pivot
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+      - ./docker/postgres/initdb.d:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d pivot"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7
+    container_name: pivot-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: pivot-qdrant
+    ports:
+      - "6333:6333"  # REST
+      - "6334:6334"  # gRPC
+    volumes:
+      - qdrant_data:/qdrant/storage
+    # Qdrant image may not include curl/wget; omit healthcheck for portability.
+
+  milvus:
+    # use latest stable Milvus tag to avoid manifest-not-found; pin if you have a preferred version
+    image: milvusdb/milvus:latest
+    container_name: pivot-milvus
+    environment:
+      TZ: UTC
+    ports:
+      - "19530:19530"  # Milvus gRPC
+      - "9091:9091"    # Milvus HTTP/metrics
+    volumes:
+      - milvus_data:/var/lib/milvus
+
+  api:
+    build:
+      context: .
+      dockerfile: services/api/Dockerfile
+    container_name: pivot-api
+    depends_on:
+      - postgres
+      - redis
+      - milvus
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/pivot
+      REDIS_URL: redis://redis:6379/0
+      MILVUS_HOST: milvus
+      MILVUS_PORT: 19530
+      EMBED_MODEL: BAAI/bge-large-en
+    ports:
+      - "9000:9000"
+    volumes:
+      - ./data:/data
+
+  workers:
+    build:
+      context: .
+      dockerfile: services/workers/Dockerfile
+    container_name: pivot-workers
+    depends_on:
+      - postgres
+      - redis
+      - milvus
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/pivot
+      REDIS_URL: redis://redis:6379/0
+      MILVUS_HOST: milvus
+      MILVUS_PORT: 19530
+      EMBED_MODEL: BAAI/bge-large-en
+    volumes:
+      - ./data:/data
+
+  # Embedding sanity test container (run on-demand)
+  embedtest:
+    build:
+      context: ./services/embedtest
+      dockerfile: Dockerfile
+    container_name: pivot-embedtest
+    profiles: ["tools"]
+    command: ["python", "embed_test.py"]
+    environment:
+      TRANSFORMERS_OFFLINE: "0"
+    # No long-running daemon; this exits after printing results.
+
+  # Optional LLM runtimes — disabled by default. Start with: `--profile llm`
+  ollama:
+    image: ollama/ollama:latest
+    container_name: pivot-ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    profiles: ["llm"]
+    # For GPU acceleration, ensure NVIDIA Container Toolkit is installed.
+    # On supported Docker versions, you can run with: `docker compose --profile llm up -d ollama`.
+
+  vllm:
+    image: vllm/vllm-openai:latest
+    container_name: pivot-vllm
+    restart: unless-stopped
+    ports:
+      - "8000:8000"  # OpenAI-compatible endpoint
+    environment:
+      - VLLM_OPENAI_PORT=8000
+      - MODEL_NAME=facebook/opt-125m  # change to your desired model (requires GPU for larger models)
+    command: ["--model", "${MODEL_NAME:-facebook/opt-125m}"]
+    profiles: ["llm"]
+    # For GPU use, start only on GPU-equipped hosts.
+
+  llama_cpp:
+    image: ghcr.io/ggerganov/llama.cpp:server
+    container_name: pivot-llama-cpp
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./models:/models
+    command: ["-m", "/models/MODEL.gguf", "-c", "4096", "-ngl", "0"]
+    profiles: ["llm"]
+    # Place a GGUF model at ./models/MODEL.gguf before starting this service.
+
+volumes:
+  pg_data:
+  qdrant_data:
+  ollama_data:
+  milvus_data:
