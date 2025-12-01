@@ -1,0 +1,13 @@
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+celery==5.4.0
+redis==5.0.8
+psycopg2-binary==2.9.9
+pymilvus==2.4.9
+requests==2.32.3
+beautifulsoup4==4.12.3
+langdetect==1.0.9
+transformers==4.44.2
+sentence-transformers==3.1.0
+torch==2.3.1+cpu
+--index-url https://download.pytorch.org/whl/cpu
